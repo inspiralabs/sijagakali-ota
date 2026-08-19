@@ -12,7 +12,8 @@ export function getSupabaseClient(): SupabaseClient {
   }
 
   client = createClient(url, key, {
-    auth: { persistSession: false }
+    auth: { persistSession: false },
+    db: { schema: 'sijagakali' }
   });
   return client;
 }
