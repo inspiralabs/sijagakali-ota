@@ -1,0 +1,29 @@
+{
+  "name": "sijagakali-ota",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "migrate": "tsx src/migrate.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.687.0",
+    "@fastify/multipart": "^9.0.1",
+    "@supabase/supabase-js": "^2.49.1",
+    "dotenv": "^16.5.0",
+    "fastify": "^5.3.3",
+    "mqtt": "^5.10.4",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.8.3",
+    "tsx": "^4.19.4",
+    "vitest": "^2.1.5"
+  }
+}
