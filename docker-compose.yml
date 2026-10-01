@@ -1,0 +1,32 @@
+# Deploy VPS — network `edge` + Traefik yang sama dengan sijagakali-api.
+services:
+  ota-api:
+    build: { context: ., target: backend }
+    image: sijagakali-ota:backend
+    env_file: [.env]
+    environment:
+      PORT: "3787"
+      MQTT_BROKER_URL: mqtt://sijagakali-mosquitto:1883
+    restart: unless-stopped
+    init: true
+    networks: [edge]
+    expose: ["3787"]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.sijagakali-ota-api.rule=Host(`ota-sijagakali.inspiralabs.id`) && PathPrefix(`/api`)
+      - traefik.http.services.sijagakali-ota-api.loadbalancer.server.port=3787
+
+  ota-web:
+    build: { context: ., target: frontend }
+    image: sijagakali-ota:frontend
+    restart: unless-stopped
+    networks: [edge]
+    expose: ["8080"]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.sijagakali-ota-web.rule=Host(`ota-sijagakali.inspiralabs.id`)
+      - traefik.http.services.sijagakali-ota-web.loadbalancer.server.port=8080
+
+networks:
+  edge:
+    external: true
