@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Fastify, { FastifyInstance } from 'fastify';
-import multipart from '@fastify/multipart';
+import { FastifyInstance } from 'fastify';
 
 const insertedRows: any[] = [];
 
@@ -38,10 +37,8 @@ describe('firmware routes', () => {
 
   beforeEach(async () => {
     insertedRows.length = 0;
-    const { registerFirmwareRoutes } = await import('./firmware.js');
-    app = Fastify();
-    await app.register(multipart);
-    await registerFirmwareRoutes(app);
+    const { buildApp } = await import('../app.js');
+    app = buildApp();
   });
 
   it('rejects an invalid version string', async () => {
@@ -76,5 +73,15 @@ describe('firmware routes', () => {
     const listRes = await app.inject({ method: 'GET', url: '/api/firmware' });
     expect(listRes.statusCode).toBe(200);
     expect(listRes.json()).toHaveLength(1);
+  });
+
+  it('accepts firmware larger than the 1 MB multipart default', async () => {
+    const form = new FormData();
+    form.append('version', 'sijagakali-v1.0.2');
+    form.append('file', new Blob([Buffer.alloc(2 * 1024 * 1024)]), 'firmware.bin');
+
+    const res = await app.inject({ method: 'POST', url: '/api/firmware', payload: form });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().file_size_bytes).toBe(2 * 1024 * 1024);
   });
 });
