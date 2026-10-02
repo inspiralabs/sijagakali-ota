@@ -68,8 +68,8 @@ describe('MQTT listener', () => {
     expect(updates['req-1']).toEqual(
       expect.objectContaining({ status: 'acked_ok', ack_detail: 'update ok, restarting' })
     );
-    expect(ingestionRows).toHaveLength(1);
-    expect(ingestionRows[0].correlation_id).toBe('req-1');
+    // ack lives in firmware_updates only; mqtt_ingestion is the sensor staging table
+    expect(ingestionRows).toHaveLength(0);
   });
 
   it('updates device_configs on a status message', async () => {

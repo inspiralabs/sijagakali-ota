@@ -31,7 +31,9 @@ async function handleMessage(topic: string, messageBuffer: Buffer) {
     const { request_id, ok, detail } = payload;
     if (!request_id) return;
 
-    await supabase
+    // Ack is recorded here only. mqtt_ingestion is the sensor staging table: its schema
+    // rejects ack rows, and every insert there triggers data-processing.
+    const { error } = await supabase
       .from('firmware_updates')
       .update({
         status: ok ? 'acked_ok' : 'acked_fail',
@@ -39,15 +41,7 @@ async function handleMessage(topic: string, messageBuffer: Buffer) {
         acked_at: new Date().toISOString()
       })
       .eq('mqtt_request_id', request_id);
-
-    await supabase.from('mqtt_ingestion').insert({
-      deployment_slug: payload.deployment_slug ?? null,
-      device_id: deviceId,
-      correlation_id: request_id,
-      message_type: 'ota_ack',
-      payload_json: payload,
-      ingest_status: 'received'
-    });
+    if (error) console.error('MQTT listener: firmware_updates update failed:', error.message);
     return;
   }
 
