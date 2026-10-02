@@ -7,7 +7,8 @@ import { registerDeployRoutes } from './routes/deploy.js';
 export function buildApp(): FastifyInstance {
   const app = Fastify({ logger: true });
 
-  app.register(multipart);
+  // Default fileSize is 1 MB; ESP32 firmware images are larger (OTA partitions go up to ~16 MB).
+  app.register(multipart, { limits: { fileSize: 16 * 1024 * 1024 } });
 
   app.get('/health', async () => {
     return { ok: true };
