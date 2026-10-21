@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { FastifyInstance } from 'fastify';
 import { getSupabaseClient } from '../supabaseClient.js';
 import { uploadToR2 } from '../r2Client.js';
@@ -29,7 +30,10 @@ export async function registerFirmwareRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'file is required' });
     }
 
-    const r2Key = `firmware/${version}.bin`;
+    // Content hash in the key: the public R2 URL is cached by Cloudflare for hours, so reusing a key
+    // could serve a stale binary, and a rejected duplicate version would overwrite a live release.
+    const hash = createHash('sha256').update(fileBuffer).digest('hex').slice(0, 12);
+    const r2Key = `firmware/${version}-${hash}.bin`;
     await uploadToR2(r2Key, fileBuffer, 'application/octet-stream');
 
     const supabase = getSupabaseClient();

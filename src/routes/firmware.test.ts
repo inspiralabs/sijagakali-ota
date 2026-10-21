@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FastifyInstance } from 'fastify';
+import { createHash } from 'node:crypto';
 
 const insertedRows: any[] = [];
 
@@ -68,7 +69,10 @@ describe('firmware routes', () => {
     expect(uploadRes.statusCode).toBe(201);
     const body = uploadRes.json();
     expect(body.version).toBe('sijagakali-v1.0.1');
-    expect(body.r2_key).toBe('firmware/sijagakali-v1.0.1.bin');
+    // Content hash in the key: a re-upload gets a new URL, so the CDN can't serve a stale
+    // binary and a rejected duplicate version can't overwrite a live release's object.
+    const hash = createHash('sha256').update('fake binary').digest('hex').slice(0, 12);
+    expect(body.r2_key).toBe(`firmware/sijagakali-v1.0.1-${hash}.bin`);
 
     const listRes = await app.inject({ method: 'GET', url: '/api/firmware' });
     expect(listRes.statusCode).toBe(200);
