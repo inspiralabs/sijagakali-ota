@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { getSupabaseClient } from '../supabaseClient.js';
 import { getMqttClient } from '../mqttClient.js';
 import { requireAuth } from '../auth.js';
+import { ONLINE_THRESHOLD_SECONDS } from './devices.js';
 
 export async function registerDeployRoutes(app: FastifyInstance) {
   app.post<{
@@ -17,6 +18,22 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     }
 
     const supabase = getSupabaseClient();
+
+    // The command is published at QoS 0 and the device uses a clean session, so the broker
+    // doesn't queue it: a command sent while the device is offline is lost and stays pending forever.
+    const { data: device, error: deviceError } = await supabase
+      .from('device_configs')
+      .select('last_seen_at')
+      .eq('deployment_slug', deployment_slug)
+      .eq('device_id', device_id)
+      .maybeSingle();
+    if (deviceError) {
+      return reply.code(500).send({ error: deviceError.message });
+    }
+    const lastSeenMs = device?.last_seen_at ? new Date(device.last_seen_at).getTime() : 0;
+    if (Date.now() - lastSeenMs > ONLINE_THRESHOLD_SECONDS * 1000) {
+      return reply.code(409).send({ error: 'device is offline; the OTA command would be lost. Wait until it is online again.' });
+    }
 
     const { data: release, error: releaseError } = await supabase
       .from('firmware_releases')

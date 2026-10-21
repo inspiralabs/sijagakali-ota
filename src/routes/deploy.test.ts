@@ -5,6 +5,7 @@ process.env.R2_PUBLIC_BASE_URL = 'https://firmware.example.com';
 
 const publishedMessages: { topic: string; payload: string }[] = [];
 const insertedUpdates: any[] = [];
+let deviceLastSeenAt: string | null = null;
 
 vi.mock('../mqttClient.js', () => ({
   getMqttClient: () => ({
@@ -17,6 +18,17 @@ vi.mock('../mqttClient.js', () => ({
 vi.mock('../supabaseClient.js', () => ({
   getSupabaseClient: () => ({
     from: (table: string) => {
+      if (table === 'device_configs') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({ data: { last_seen_at: deviceLastSeenAt }, error: null })
+              })
+            })
+          })
+        };
+      }
       if (table === 'firmware_releases') {
         return {
           select: () => ({
@@ -62,6 +74,7 @@ describe('POST /api/firmware/:id/deploy', () => {
   beforeEach(async () => {
     publishedMessages.length = 0;
     insertedUpdates.length = 0;
+    deviceLastSeenAt = new Date().toISOString();
     const { registerDeployRoutes } = await import('./deploy.js');
     app = Fastify();
     await registerDeployRoutes(app);
@@ -86,5 +99,20 @@ describe('POST /api/firmware/:id/deploy', () => {
     expect(payload.cmd).toBe('ota_update');
     expect(payload.request_id).toBe(body.mqtt_request_id);
     expect(payload.params.url).toContain('firmware/sijagakali-v1.0.1.bin');
+  });
+
+  it('refuses to deploy to an offline device instead of losing the command', async () => {
+    deviceLastSeenAt = new Date(Date.now() - 12 * 60 * 1000).toISOString();
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/firmware/release-1/deploy',
+      payload: { deployment_slug: 'sijagakali-bojong-kulur', device_id: 'node-001' }
+    });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toMatch(/offline/);
+    expect(publishedMessages).toHaveLength(0);
+    expect(insertedUpdates).toHaveLength(0);
   });
 });

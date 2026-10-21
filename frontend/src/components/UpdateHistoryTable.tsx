@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { getFirmwareUpdates, type FirmwareUpdate } from '../lib/api';
 
 const POLL_INTERVAL_MS = 4000;
+// A successful OTA acks within ~1 minute; past this the command or its ack was lost.
+const NO_RESPONSE_AFTER_MS = 5 * 60 * 1000;
+
+const isAwaitingAck = (u: FirmwareUpdate) =>
+  u.status === 'pending' && Date.now() - new Date(u.requested_at).getTime() < NO_RESPONSE_AFTER_MS;
 
 const STATUS_LABEL: Record<FirmwareUpdate['status'], string> = {
   pending: 'Menunggu',
@@ -21,7 +26,7 @@ export function UpdateHistoryTable({ accessToken }: { accessToken: string }) {
       if (cancelled) return;
       setUpdates(data);
 
-      const hasPending = data.some((u) => u.status === 'pending');
+      const hasPending = data.some(isAwaitingAck);
       if (hasPending && !timerRef.current) {
         timerRef.current = setInterval(load, POLL_INTERVAL_MS);
       } else if (!hasPending && timerRef.current) {
@@ -53,7 +58,9 @@ export function UpdateHistoryTable({ accessToken }: { accessToken: string }) {
           <tr key={update.id} className="border-b border-gray-100">
             <td className="py-2">{update.device_id}</td>
             <td className="py-2">{new Date(update.requested_at).toLocaleString('id-ID')}</td>
-            <td className="py-2">{STATUS_LABEL[update.status]}</td>
+            <td className="py-2">
+              {update.status === 'pending' && !isAwaitingAck(update) ? 'Tidak ada respons' : STATUS_LABEL[update.status]}
+            </td>
             <td className="py-2">{update.ack_detail ?? '-'}</td>
           </tr>
         ))}
