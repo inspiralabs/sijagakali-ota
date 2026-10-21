@@ -17,6 +17,7 @@ const device = {
 describe('DevicesTable', () => {
   it('renders devices and shows the outdated badge', async () => {
     vi.spyOn(api, 'getDevices').mockResolvedValue([device]);
+    vi.spyOn(api, 'getFirmwareUpdates').mockResolvedValue([]);
 
     render(<DevicesTable accessToken="tok" onDeploy={() => {}} />);
 
@@ -29,6 +30,7 @@ describe('DevicesTable', () => {
 
   it('calls onDeploy with the clicked device', async () => {
     vi.spyOn(api, 'getDevices').mockResolvedValue([device]);
+    vi.spyOn(api, 'getFirmwareUpdates').mockResolvedValue([]);
     const onDeploy = vi.fn();
 
     render(<DevicesTable accessToken="tok" onDeploy={onDeploy} />);
@@ -37,5 +39,32 @@ describe('DevicesTable', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Deploy' }));
 
     expect(onDeploy).toHaveBeenCalledWith(expect.objectContaining({ device_id: 'node-001' }));
+  });
+
+  it('locks the Deploy button and shows progress while an update is running', async () => {
+    vi.spyOn(api, 'getDevices').mockResolvedValue([device]);
+    vi.spyOn(api, 'getFirmwareUpdates').mockResolvedValue([
+      {
+        id: 'u1',
+        deployment_slug: 'sijagakali-bojong-kulur',
+        device_id: 'node-001',
+        firmware_release_id: 'r1',
+        requested_by: null,
+        requested_at: new Date().toISOString(),
+        mqtt_request_id: 'req-1',
+        status: 'in_progress',
+        ack_detail: 'downloading 40%',
+        acked_at: null
+      }
+    ]);
+    const onDeploy = vi.fn();
+
+    render(<DevicesTable accessToken="tok" onDeploy={onDeploy} />);
+
+    const button = await screen.findByRole('button', { name: 'Sedang update' });
+    expect(button).toBeDisabled();
+    expect(screen.getByText('downloading 40%')).toBeInTheDocument();
+    fireEvent.click(button);
+    expect(onDeploy).not.toHaveBeenCalled();
   });
 });

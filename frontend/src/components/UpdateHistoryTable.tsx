@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { getFirmwareUpdates, type FirmwareUpdate } from '../lib/api';
+import { getFirmwareUpdates, isUpdateActive, type FirmwareUpdate } from '../lib/api';
 
 const POLL_INTERVAL_MS = 4000;
 
 const STATUS_LABEL: Record<FirmwareUpdate['status'], string> = {
   pending: 'Menunggu',
+  in_progress: 'Sedang update',
   acked_ok: 'Berhasil',
   acked_fail: 'Gagal'
 };
@@ -21,7 +22,7 @@ export function UpdateHistoryTable({ accessToken }: { accessToken: string }) {
       if (cancelled) return;
       setUpdates(data);
 
-      const hasPending = data.some((u) => u.status === 'pending');
+      const hasPending = data.some(isUpdateActive);
       if (hasPending && !timerRef.current) {
         timerRef.current = setInterval(load, POLL_INTERVAL_MS);
       } else if (!hasPending && timerRef.current) {
@@ -53,7 +54,9 @@ export function UpdateHistoryTable({ accessToken }: { accessToken: string }) {
           <tr key={update.id} className="border-b border-gray-100">
             <td className="py-2">{update.device_id}</td>
             <td className="py-2">{new Date(update.requested_at).toLocaleString('id-ID')}</td>
-            <td className="py-2">{STATUS_LABEL[update.status]}</td>
+            <td className="py-2">
+              {(update.status === 'pending' || update.status === 'in_progress') && !isUpdateActive(update) ? 'Tidak ada respons' : STATUS_LABEL[update.status]}
+            </td>
             <td className="py-2">{update.ack_detail ?? '-'}</td>
           </tr>
         ))}

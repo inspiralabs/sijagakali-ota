@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { getSupabaseClient } from '../supabaseClient.js';
 import { requireAuth } from '../auth.js';
 
-const ONLINE_THRESHOLD_SECONDS = 360;
+export const ONLINE_THRESHOLD_SECONDS = 360;
 
 export async function registerDeviceRoutes(app: FastifyInstance) {
   app.get('/api/devices', { onRequest: [requireAuth] }, async (_request, reply) => {
