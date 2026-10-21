@@ -5,6 +5,10 @@ import { getMqttClient } from '../mqttClient.js';
 import { requireAuth } from '../auth.js';
 import { ONLINE_THRESHOLD_SECONDS } from './devices.js';
 
+// An unanswered update older than this is treated as lost. Keep in sync with
+// NO_RESPONSE_AFTER_MS in frontend/src/lib/api.ts.
+const ACTIVE_UPDATE_WINDOW_MS = 10 * 60 * 1000;
+
 export async function registerDeployRoutes(app: FastifyInstance) {
   app.post<{
     Params: { id: string };
@@ -19,8 +23,8 @@ export async function registerDeployRoutes(app: FastifyInstance) {
 
     const supabase = getSupabaseClient();
 
-    // The command is published at QoS 0 and the device uses a clean session, so the broker
-    // doesn't queue it: a command sent while the device is offline is lost and stays pending forever.
+    // Firmware <= v1.3.1 uses a clean session, so the broker drops a command sent while the device
+    // is offline. Newer firmware has a persistent session, but an OTA firing hours later is a surprise.
     const { data: device, error: deviceError } = await supabase
       .from('device_configs')
       .select('last_seen_at')
@@ -33,6 +37,21 @@ export async function registerDeployRoutes(app: FastifyInstance) {
     const lastSeenMs = device?.last_seen_at ? new Date(device.last_seen_at).getTime() : 0;
     if (Date.now() - lastSeenMs > ONLINE_THRESHOLD_SECONDS * 1000) {
       return reply.code(409).send({ error: 'device is offline; the OTA command would be lost. Wait until it is online again.' });
+    }
+
+    const { data: active, error: activeError } = await supabase
+      .from('firmware_updates')
+      .select('id')
+      .eq('deployment_slug', deployment_slug)
+      .eq('device_id', device_id)
+      .in('status', ['pending', 'in_progress'])
+      .gte('requested_at', new Date(Date.now() - ACTIVE_UPDATE_WINDOW_MS).toISOString())
+      .limit(1);
+    if (activeError) {
+      return reply.code(500).send({ error: activeError.message });
+    }
+    if (active && active.length > 0) {
+      return reply.code(409).send({ error: 'an update for this device is already in progress' });
     }
 
     const { data: release, error: releaseError } = await supabase
@@ -74,7 +93,7 @@ export async function registerDeployRoutes(app: FastifyInstance) {
       request_id: mqttRequestId,
       params: { url }
     });
-    mqttClient.publish(topic, payload);
+    mqttClient.publish(topic, payload, { qos: 1 }); // QoS 1: queued in the device's persistent session over a reconnect
 
     return reply.code(201).send(updateRow);
   });

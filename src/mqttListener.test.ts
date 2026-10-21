@@ -20,12 +20,21 @@ vi.mock('./supabaseClient.js', () => ({
       if (table === 'firmware_updates') {
         return {
           update: (fields: any) => ({
-            eq: (_col: string, val: string) => ({
-              then: (resolve: any) => {
+            eq: (_col: string, val: string) => {
+              const apply = (resolve: any) => {
                 updates[val] = { ...(updates[val] ?? {}), ...fields };
                 resolve({ error: null });
-              }
-            })
+              };
+              return {
+                then: apply,
+                in: (_c: string, statuses: string[]) => ({
+                  then: (resolve: any) => {
+                    if (statuses.includes(updates[val]?.status ?? 'pending')) return apply(resolve);
+                    resolve({ error: null });
+                  }
+                })
+              };
+            }
           })
         };
       }
@@ -70,6 +79,23 @@ describe('MQTT listener', () => {
     );
     // ack lives in firmware_updates only; mqtt_ingestion is the sensor staging table
     expect(ingestionRows).toHaveLength(0);
+  });
+
+  it('records a progress ack as in_progress without finishing the request', async () => {
+    const payload = JSON.stringify({ request_id: 'req-2', ok: true, done: false, detail: 'downloading 40%' });
+    fakeClient.emit('message', 'sijagakali/node-001/command/ack', Buffer.from(payload));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(updates['req-2']).toEqual({ status: 'in_progress', ack_detail: 'downloading 40%' });
+  });
+
+  it('does not let a late progress ack overwrite a finished request', async () => {
+    updates['req-3'] = { status: 'acked_ok', ack_detail: 'update ok, restarting' };
+    const payload = JSON.stringify({ request_id: 'req-3', ok: true, done: false, detail: 'downloading 90%' });
+    fakeClient.emit('message', 'sijagakali/node-001/command/ack', Buffer.from(payload));
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(updates['req-3'].status).toBe('acked_ok');
   });
 
   it('updates device_configs on a status message', async () => {

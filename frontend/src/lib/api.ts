@@ -29,10 +29,18 @@ export type FirmwareUpdate = {
   requested_by: string | null;
   requested_at: string;
   mqtt_request_id: string;
-  status: 'pending' | 'acked_ok' | 'acked_fail';
+  status: 'pending' | 'in_progress' | 'acked_ok' | 'acked_fail';
   ack_detail: string | null;
   acked_at: string | null;
 };
+
+// A successful OTA finishes in ~1 minute; past this the command or its ack was lost.
+// Keep in sync with ACTIVE_UPDATE_WINDOW_MS in src/routes/deploy.ts.
+const NO_RESPONSE_AFTER_MS = 10 * 60 * 1000;
+
+export const isUpdateActive = (u: FirmwareUpdate) =>
+  (u.status === 'pending' || u.status === 'in_progress') &&
+  Date.now() - new Date(u.requested_at).getTime() < NO_RESPONSE_AFTER_MS;
 
 async function apiFetch<T>(path: string, accessToken: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {

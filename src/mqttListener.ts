@@ -28,8 +28,20 @@ async function handleMessage(topic: string, messageBuffer: Buffer) {
   const supabase = getSupabaseClient();
 
   if (messageType === 'command/ack') {
-    const { request_id, ok, detail } = payload;
+    const { request_id, ok, detail, done } = payload;
     if (!request_id) return;
+
+    // Firmware >= v1.3.2 sends progress acks (done: false) before the final one.
+    // Only advance unfinished rows, so a late/redelivered progress ack can't undo a result.
+    if (done === false) {
+      const { error } = await supabase
+        .from('firmware_updates')
+        .update({ status: 'in_progress', ack_detail: detail ?? null })
+        .eq('mqtt_request_id', request_id)
+        .in('status', ['pending', 'in_progress']);
+      if (error) console.error('MQTT listener: firmware_updates progress update failed:', error.message);
+      return;
+    }
 
     // Ack is recorded here only. mqtt_ingestion is the sensor staging table: its schema
     // rejects ack rows, and every insert there triggers data-processing.
